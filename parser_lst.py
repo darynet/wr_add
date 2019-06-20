@@ -1,25 +1,36 @@
-##Connect to postgres (test db)
 import psycopg2
-from psycopg2 import sql
 import pandas as pd
+import glob, os
 
-df = pd.read_excel('test.xlsx', sheet_names='Лист1')
-df = df.fillna('')
+path = r'D:\Project\WorkRegistry\dataXLS\tmp' # путь где лежат эксельки
+all_files = glob.glob(path + "\*.xlsx")
 
+insertdata = []
 dataset = []
-df.index = range(1,len(df)+1)
-df.loc[df['Закрытых заявок Ремеди'] == '', 'Закрытых заявок Ремеди'] = '0'
-df['Дата'] = df['Дата'].apply(str)
+fields = ['Дата','Исполнитель',	'Код', 'Наименование', 'Работы', 'Список контактов по работе', 'Затрачено времени (в минутах)', 'Состояние', 'Видимость', 'Закрытых заявок Ремеди', 'Контрагент', 'Вид затрат', 'Функциональный блок', 'Вид работ', 'Вид услуг СФ',	'Вид формирования СФ']
+for filename in all_files:
+    tz = pd.read_excel(filename, sheet_names='Первичное внесение данных', usecols=fields)
+    tz = tz.fillna('')
+    tz.loc[tz['Закрытых заявок Ремеди'] == '', 'Закрытых заявок Ремеди'] = '0'	# ClosedRemedyRequestCnt - int, пустое или null при записи в БД не прокатывает
+    tz['Дата'] = tz['Дата'].apply(str)	#
 
-for row in df.itertuples(index=True, name=None):	
-	dataset.append(row)
+    for row in tz.itertuples(index=True, name=None):
+        dataset.append(row)
 
-
+# очень тупо меняем индексы (потому что нормально через цикл у меня не получилось сделать)
+i=0
+for row in dataset:
+	row = list(row)
+	row[0] = i+1
+	i=i+1
+	insertdata.append(row)
+# print(insertdata)
+# коннектимся к БД
 conn = psycopg2.connect(host='localhost', dbname='work_registry', user='testuser', password='1')
 cursor = conn.cursor()
  
 # insert = sql.SQL(
-for row in range(len(dataset)):
+for row in range(len(insertdata)):
 	cursor.execute(
 	   	"""do $body$
 	declare
@@ -48,16 +59,8 @@ for row in range(len(dataset)):
 
 	end;
 	$body$ language plpgsql;
-	""", dataset[row])
-# .format(
-#         sql.SQL(',').join(map(sql.Literal, dataset)))
+	""", insertdata[row])
 
-# cursor.executemany(insert, QueryData)
-# cursor.execute('Select * from Registry where id_executor=11 and id_task=122')
-# row = cursor.fetchall()
-# print (row)
-
-# Закрываем подключение.
-cursor.close()
+cursor.close() # Закрываем подключение (rollback)
 # conn.commit()
 conn.close()
