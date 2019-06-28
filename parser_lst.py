@@ -6,7 +6,7 @@ from tkinter import filedialog
 
 root= tk.Tk()
 
-panelFrame = tk.Frame(root, width = 500, height = 500, bg = 'lightsteelblue')
+panelFrame = tk.Frame(root, width = 800, height = 500, bg = 'lightsteelblue')
 panelFrame.pack()
 
 path = r'D:\Project\WorkRegistry\dataXLS\tmp' # путь где лежат эксельки
@@ -98,28 +98,46 @@ dateEnd_button.place(x = 130, y = 45, width = 90, height = 25)
 dateBegin.place(x = 10, y = 10, width = 100, height = 25)
 dateEnd.place(x = 10, y = 45, width = 100, height = 25)
 
+dep_UPBS = tk.IntVar()
+dep_UPBS_checkbutton = tk.Checkbutton(panelFrame, text="УПБС", variable=dep_UPBS,
+                                 onvalue=1, offvalue=0, padx=15, pady=10)
+ 
+dep_Developers = tk.IntVar()
+dep_Developers_checkbutton = tk.Checkbutton(panelFrame, text="Отдел разработки ПО", variable=dep_Developers,
+                                     onvalue=1, offvalue=0, padx=15, pady=10)
+dep_Support = tk.IntVar()
+dep_Support_checkbutton = tk.Checkbutton(panelFrame, text="Отдел внедрения и сопровождения ПО", variable=dep_Support,
+                                     onvalue=1, offvalue=0, padx=15, pady=10)
+dep_UPBS_checkbutton.place(x = 10, y = 300)
+dep_Developers_checkbutton.place(x = 100, y = 300)
+dep_Support_checkbutton.place(x = 280, y = 300)
 
 def getExcel ():
-	department = 3	# 1 - Управление (Овсянкин Е.), 2 - Отдел разработки, 3 - Отдел сопровождения
+	# department = 3	# 1 - Управление (Овсянкин Е.), 2 - Отдел разработки, 3 - Отдел сопровождения
 	# dateB = '2019-06-03'
 	# dateE = '2019-06-09'
+	if dep_UPBS.get() == 1:
+		department = 1
+	elif dep_Developers.get() == 1:
+		department = 2
+	elif dep_Support.get() == 1:
+		department = 3
 	headers = ['ТН', 'ФИО', 'Код ОА', 'IID УКС/Проекта', 'Описание работ', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС']
 
 	conn = psycopg2.connect(host='localhost', dbname='work_registry', user='testuser', password='1')
 	cursor = conn.cursor()
-	cursor.execute('SELECT * FROM  Export2SUTZ(%s::date,%s::date, %s)', (dateB, dateE, department))
+	cursor.execute('SELECT * FROM  Export2SUTZ(%s::date,%s::date, %s::int)', (dateB, dateE, department))
 	records = cursor.fetchall()
 	result = pd.DataFrame(records)
 	if department == 1:
-		result.to_excel(path + "\SUTZ\Шаблон_СУТЗ_.xlsx", startrow=4, index=False, header=headers)
+		result.to_excel(path + "\Шаблон_СУТЗ_.xlsx", startrow=4, index=False, header=headers)
 	if department == 2:
-		result.to_excel(path + "\SUTZ\Шаблон_СУТЗ_разраб.xlsx", startrow=4, index=False, header=headers)
+		result.to_excel(r'D:\Project\WorkRegistry\dataXLS\tmp\SUTZ\Шаблон_СУТЗ_разраб.xlsx', startrow=4, index=False, header=headers)
 	if department == 3:
-		result.to_excel(path + "\SUTZ\Шаблон_СУТЗ_сопр.xlsx", startrow=4, index=False, header=headers)
+		result.to_excel(r'D:\Project\WorkRegistry\dataXLS\tmp\SUTZ\Шаблон_СУТЗ_сопр.xlsx', startrow=4, index=False, header=headers)
 	# print(records)
 	cursor.close()
 	conn.close()
-
 
 browseButton_Excel = tk.Button(panelFrame, text='Import Data to WorkRegistry', command=impExcel, bg='green', fg='white', font=('helvetica', 12, 'bold'))
 browseButton_Export = tk.Button(panelFrame, text='Export Data for SUTZ', command=getExcel, bg='green', fg='white', font=('helvetica', 12, 'bold'))
