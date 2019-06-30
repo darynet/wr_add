@@ -1,15 +1,18 @@
-import psycopg2
+#!/usr/bin/python
+# -*- coding: iso-8859-15 -*-
+
+# import psycopg2
 import pandas as pd
 import glob, os
-import tkinter as tk
-from tkinter import filedialog
+import Tkinter as tk
+
 
 root= tk.Tk()
 
 panelFrame = tk.Frame(root, width = 800, height = 500, bg = 'lightsteelblue')
 panelFrame.pack()
 
-path = r'D:\Project\WorkRegistry\dataXLS\tmp' # путь где лежат эксельки
+path = os.getcwd()
 
 def impExcel ():
 	all_files = glob.glob(path + "\*.xlsx")
@@ -77,26 +80,38 @@ def impExcel ():
 
 def getDTB():
 	global dateB
-	dateB = "'" + dateB.get() + "'"
+	dateB = "'" + DTB.get() + "'"
+	DTB_view.set(dateB)
 
 
 def getDTE():
 	global dateE
-	dateE = "'" + dateE.get() + "'"
-	
+	dateE = "'" + DTE.get() + "'"
+	DTE_view.set(dateE)
 
-dateB = tk.StringVar()
-dateE = tk.StringVar()
+DTB = tk.StringVar()
+DTE = tk.StringVar()
 
-dateBegin = tk.Entry(panelFrame, textvariable=dateB)
-dateEnd = tk.Entry(panelFrame, textvariable=dateE)
-dateBegin_button = tk.Button(text="Set DateB", command=getDTB)
-dateEnd_button = tk.Button(text="Set DateE", command=getDTE)
+dateBegin = tk.Entry(panelFrame, textvariable=DTB)
+dateEnd = tk.Entry(panelFrame, textvariable=DTE)
+dateBegin_button = tk.Button(panelFrame, text="Set DateB", command=getDTB)
+dateEnd_button = tk.Button(panelFrame, text="Set DateE", command=getDTE)
+# dateBegin_label = tk.Label(panelFrame, text="DateB:")
 
-dateBegin_button.place(x = 130, y = 10, width = 90, height = 25)
-dateEnd_button.place(x = 130, y = 45, width = 90, height = 25)
-dateBegin.place(x = 10, y = 10, width = 100, height = 25)
-dateEnd.place(x = 10, y = 45, width = 100, height = 25)
+dateBegin_button.place(x = 230, y = 10, width = 90, height = 25)
+dateEnd_button.place(x = 230, y = 45, width = 90, height = 25)
+dateBegin.place(x = 120, y = 10, width = 100, height = 25)
+dateEnd.place(x = 120, y = 45, width = 100, height = 25)
+# dateBegin_label.place(x = 10, y = 10, width = 60, height = 25)
+
+DTB_view = tk.StringVar()
+DTB_label = tk.Message(panelFrame, textvariable=DTB_view)
+DTB_label.place(x = 10, y = 10, width = 100, height = 25)
+
+DTE_view = tk.StringVar()
+DTE_label = tk.Message(panelFrame, textvariable=DTE_view)
+DTE_label.place(x = 10, y = 45, width = 100, height = 25)
+
 
 dep_UPBS = tk.IntVar()
 dep_UPBS_checkbutton = tk.Checkbutton(panelFrame, text="УПБС", variable=dep_UPBS,
