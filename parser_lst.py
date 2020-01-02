@@ -1,73 +1,102 @@
+## -*- coding: utf-8 -*-
+
 import psycopg2
 import pandas as pd
 import glob, os
 import tkinter as tk
 from datetime import datetime
+from tkinter import messagebox as mb
+import sys
 
 path = os.getcwd()	# получим путь к директории, где лежит скрипт
 path_in = path + r'\tmp' # путь, где лежат эксельки для загрузки в workregistry
-path_out = path + r'\2019\июль' # путь, куда выгружаются эксельки для СУТЗ
+path_out = path + r'\2019\декабрь' # путь, куда выгружаются эксельки для СУТЗ
 
 # Импорт данных в workregistry. Спарсим данные из экселек, подключимся к БД и запустим скрипт загрузки
 def impExcel ():
 	all_files = glob.glob(path_in + "\*.xlsx")
-
 	insertdata = []
 	dataset = []
-	fields = ['Дата','Исполнитель',	'Код', 'Наименование', 'Работы', 'Список контактов по работе', 'Затрачено времени (в минутах)', 'Состояние', 'Видимость', 'Закрытых заявок Ремеди', 'Контрагент', 'Вид затрат', 'Функциональный блок', 'Вид работ', 'Вид услуг СФ',	'Вид формирования СФ']
-	for filename in all_files:
-		tz = pd.read_excel(filename, sheet_names='Первичное внесение данных', usecols=fields)
-		tz = tz.fillna('')
-		tz.loc[tz['Закрытых заявок Ремеди'] == '', 'Закрытых заявок Ремеди'] = '0'	# ClosedRemedyRequestCnt - int, пустое или null при записи в БД не прокатывает
-		tz['Дата'] = tz['Дата'].apply(str)	#
-		for row in tz.itertuples(index=True, name=None):
-			if row[1] != '' and row[2] != '' and row[3] != '':
-				dataset.append(row)
-
+	fields = ['Дата','Исполнитель',	'Код', 'Наименование', 'Работы', 'Список контактов по работе', 'Затрачено времени (в минутах)', 'Видимость', 'Код задачи', 'Краткое наименование задачи', 'Контрагент', 'Вид затрат', 'Функциональный блок', 'Вид работ', 'Вид услуг СФ',	'Вид формирования СФ', 'Состояние', 'Закрытых заявок Ремеди']
+	try:
+		for filename in all_files:
+			tz = pd.read_excel(filename, sheet_names='Первичное внесение данных', usecols=fields)
+			tz = tz.fillna('')
+			tz.loc[tz['Закрытых заявок Ремеди'] == '', 'Закрытых заявок Ремеди'] = '0'	# ClosedRemedyRequestCnt - int, пустое или null при записи в БД не прокатывает
+			tz['Дата'] = tz['Дата'].apply(str)	#чтоб дата нормально отображалась
+			for row in tz.itertuples(index=True, name=None):	# это видимо прописывают индексы к каждой строчке (?)
+				if row[1] != '' and row[2] != '' and row[3] != '': #берем только те строки, по которым указана дата, ФИО и таск
+					dataset.append(row)
+	
 	# очень тупо меняем индексы (потому что нормально через цикл у меня не получилось сделать)
-	i=0
-	for row in dataset:
-		row = list(row)
-		row[0] = i+1
-		i=i+1
-		insertdata.append(row)
+		i=0
+		for row in dataset:
+			row = list(row)
+			row[0] = i+1
+			i=i+1
+			insertdata.append(row)
 
 	# коннектимся к БД
-	conn = psycopg2.connect(host='localhost', dbname='work_registry', user='testuser', password='1')
-	cursor = conn.cursor()
-	 
-	# insert = sql.SQL(
-	for row in range(len(insertdata)):
-		cursor.execute(
-		   	"""do $body$
-		declare
-		  r_init int;
-		  r_post int;
-		  v__cnt_reg int;
-		  v__id_portion int;
-		  v__first_reg_id int;
-		begin
-		  select tzi__init() into r_init;
-		  if r_init <> 999 /* успешное завершение */ then
-		    raise exception 'Ошибка инициализации %%s', r_init;
+		conn = psycopg2.connect(host='sam-sib-svn01', dbname='WorkRegistry', user='testuser', password='1')
+		cursor = conn.cursor()
+		err = []
+		msg = []
+		for row in range(len(insertdata)):
+			cursor.execute(
+			   	"""do $body$
+			declare
+			  r_init int;
+			  r_post int;
+			  v__cnt_reg int;
+			  v__id_portion int;
+			  v__first_reg_id int;
+			begin
+			  if is_table_temporary('tmp__res_post') <= 0 then
+			    create temp table tmp__res_post(mtype int, minfo varchar, mdescr varchar);
+			    RAISE NOTICE 'Таблица tmp__res_post создана';
+			  else
+			    truncate table tmp__res_post;
+			    RAISE NOTICE 'Таблица tmp__res_post уже сужествует, очищена';
+			  end if;
+			 
+			  select tzi__init() into r_init;
+			  if r_init <> 999 /* успешное завершение */ then
+			    raise exception 'Ошибка инициализации %%s', r_init;
+			  end if;
+
+			  insert into Data4Registry (rown, WorkDT, Executor, WorkCode, WorkName, WorkDescr, Party, TimeCosts, VisibilityName, ObjectiveCode, ObjectiveName, CustomerInfo, CostKindInfo, FunctionBlockInfo, WorkKindInfo, SFServKindInfo, SFMakeKindInfo, StateInfo, ClosedRemedyRequestCnt)
+			values (%s, %s,%s,%s,%s,%s,%s,%s,%s,NULLIF(%s,''),NULLIF(%s,''),%s,%s,%s,%s,%s,%s,%s,%s)
+			;
+
+		  insert into tmp__res_post (mtype, minfo, mdescr)
+		    select mtype, minfo, mdescr
+		      from tzi__post()
+		  ;
+
+		  if not exists(select * from tmp__res_post where mtype = 999 /* успешное завершение */) then
+		    raise INFO 'Ошибка при записи данных %%', r_post;
+		  else
+		    select id_portion, first_reg_id, cnt_reg from DataPostInfo into v__id_portion, v__first_reg_id, v__cnt_reg;
+		    RAISE INFO 'id_portion = %%, first_reg_id = %%, cnt_reg = %%', v__id_portion, v__first_reg_id, v__cnt_reg;
 		  end if;
-		  insert into Data4Registry (rown, WorkDT, Executor, WorkCode, WorkName, WorkDescr, Party, TimeCosts, StateInfo, VisibilityName, ClosedRemedyRequestCnt, CostKindInfo, CustomerInfo, FunctionBlockInfo, WorkKindInfo, SFServKindInfo, SFMakeKindInfo)
-		values (%s, %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-		;
-	  select tzi__post() into r_post;
-	  if r_post <> 999 /* успешное завершение */ then
-	    raise exception 'Ошибка при записи данных %%', r_post;
-	  else
-	    select id_portion, first_reg_id, cnt_reg from DataPostInfo into v__id_portion, v__first_reg_id, v__cnt_reg;
-	    RAISE INFO 'id_portion = %%, first_reg_id = %%, cnt_reg = %%', v__id_portion, v__first_reg_id, v__cnt_reg;
-	  end if;
+
 		end;
 		$body$ language plpgsql;
-		""", insertdata[row])
-
-	cursor.close() 
-	conn.commit()
-	# conn.close()	# Закрываем подключение (rollback)
+		select * from tmp__res_post;
+		
+			""", insertdata[row])
+			cursor.execute("select * from tmp__res_post;")
+			msg.append(cursor.fetchall())
+		cursor.close() 
+		conn.commit()
+		#conn.close()	# Закрываем подключение (rollback)
+		for i in range(len(msg)-1):
+			if msg[i][0][0] != 999: err.append(msg[i][0][2] + ) 
+		if err != [] or msg[0][0][0] != 999: 
+			mb.showinfo("Result", err)
+		else: mb.showinfo("Result", 'успешное завершение')	#сообщим что, загрузили что-то в БД
+	except ValueError:
+			mb.showerror("Ошибка", sys.exc_info()[1])	# расскажем, что пошло не так
 
 # получение дат для экспорта в СУТЗ 
 def getDTB():
@@ -85,7 +114,7 @@ def getDTE():
 
 # экспорт в СУТЗ: подключение к БД, выполнение скрипта Export2SUTZ, запись в эксель
 def getExcel ():
-	# department = 3	# 1 - Управление , 2 - Отдел разработки, 3 - Отдел сопровождения
+	# department = 3	# 1 - Управление (Овсянкин Е.), 2 - Отдел разработки, 3 - Отдел сопровождения
 	# dateB = '2019-06-03'
 	# dateE = '2019-06-09'
 
@@ -96,40 +125,45 @@ def getExcel ():
 		department = 2
 	elif dep_Support.get() == 1:
 		department = 3
-	# headers = ['ТН', 'ФИО', 'Код ОА', 'IID УКС/Проекта', 'Описание работ', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС']
-	conn = psycopg2.connect(host='localhost', dbname='work_registry', user='testuser', password='1')
-	cursor = conn.cursor()
-	cursor.execute('SELECT * FROM  Export2SUTZ(%s::date,%s::date, %s::int)', (dateB, dateE, department))
-	records = cursor.fetchall()
-	dateB_format = datetime(int(dateB[0:4]), int(dateB[5:7]), int(dateB[8:10]))
-	dateE_format = datetime(int(dateE[0:4]), int(dateE[5:7]), int(dateE[8:10]))
-	if department == 1:
-		records.insert(0, ('', '', '', '', '','', '', '', '', '', '', ''))		
-		records.insert(0, ('ТН', 'ФИО', 'Код ОА', 'IID УКС/Проекта', 'Описание работ', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'))
-		records.insert(0, ('Период регистрации с: {} по: {}'.format(dateB_format.strftime("%d.%m.%Y"), dateE_format.strftime("%d.%m.%Y")), '', '', '', '','', '', '', '', '', '', ''))
-		records.insert(0, ('МП00-0239 *код подразделения', '', '', '', '','', '', '', '', '', '', ''))
-		records.insert(0, ('Управление производственных и бизнес-систем', '', '', '', '','', '', '', '', '', '', ''))											
-		result = pd.DataFrame(records)
-		result.to_excel(path_out + "\Шаблон_СУТЗ_{}-{}.xlsx".format(dateB, dateE), startrow=0, index=False, header=None)
-	if department == 2:
-		records.insert(0, ('', '', '', '', '','', '', '', '', '', '', ''))		
-		records.insert(0, ('ТН', 'ФИО', 'Код ОА', 'IID УКС/Проекта', 'Описание работ', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'))
-		records.insert(0, ('Период регистрации с: {} по: {}'.format(dateB_format.strftime("%d.%m.%Y"), dateE_format.strftime("%d.%m.%Y")), '', '', '', '','', '', '', '', '', '', ''))
-		records.insert(0, ('МП00-0240 *код подразделения', '', '', '', '','', '', '', '', '', '', ''))
-		records.insert(0, ('Отдел разработки ПО', '', '', '', '','', '', '', '', '', '', ''))											
-		result = pd.DataFrame(records)
-		result.to_excel(path_out + "\Шаблон_СУТЗ_{}-{}_разраб.xlsx".format(dateB, dateE), startrow=0, index=False, header=None)
-	if department == 3:
-		records.insert(0, ('', '', '', '', '','', '', '', '', '', '', ''))		
-		records.insert(0, ('ТН', 'ФИО', 'Код ОА', 'IID УКС/Проекта', 'Описание работ', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'))
-		records.insert(0, ('Период регистрации с: {} по: {}'.format(dateB_format.strftime("%d.%m.%Y"), dateE_format.strftime("%d.%m.%Y")), '', '', '', '','', '', '', '', '', '', ''))
-		records.insert(0, ('МП00-0241 *код подразделения', '', '', '', '','', '', '', '', '', '', ''))
-		records.insert(0, ('Отдел внедрения и сопровождения ПО', '', '', '', '','', '', '', '', '', '', ''))									
-		result = pd.DataFrame(records)
-		result.to_excel(path_out + "\Шаблон_СУТЗ_{}-{}_сопр.xlsx".format(dateB, dateE), startrow=0, index=False, header=None)
-	# print(records)
-	cursor.close()
-	conn.close()
+	try:
+		# headers = ['ТН', 'ФИО', 'Код ОА', 'IID УКС/Проекта', 'Описание работ', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС']
+		conn = psycopg2.connect(host='sam-sib-svn01', dbname='WorkRegistry', user='testuser', password='1')
+		cursor = conn.cursor()
+		cursor.execute('SELECT * FROM  Export2SUTZ(%s::date,%s::date, %s::int)', (dateB, dateE, department))
+		records = cursor.fetchall()
+		dateB_format = datetime(int(dateB[0:4]), int(dateB[5:7]), int(dateB[8:10]))
+		dateE_format = datetime(int(dateE[0:4]), int(dateE[5:7]), int(dateE[8:10]))
+		if department == 1:
+			records.insert(0, ('', '', '', '', '','', '', '', '', '', '', ''))		
+			records.insert(0, ('ТН', 'ФИО', 'Код ОА', 'IID УКС/Проекта', 'Описание работ', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'))
+			records.insert(0, ('Период регистрации с: {} по: {}'.format(dateB_format.strftime("%d.%m.%Y"), dateE_format.strftime("%d.%m.%Y")), '', '', '', '','', '', '', '', '', '', ''))
+			records.insert(0, ('МП00-0239 *код подразделения', '', '', '', '','', '', '', '', '', '', ''))
+			records.insert(0, ('Управление производственных и бизнес-систем', '', '', '', '','', '', '', '', '', '', ''))											
+			result = pd.DataFrame(records)
+			result.to_excel(path_out + "\Шаблон_СУТЗ_{}-{}.xlsx".format(dateB, dateE), startrow=0, index=False, header=None)
+		if department == 2:
+			records.insert(0, ('', '', '', '', '','', '', '', '', '', '', ''))		
+			records.insert(0, ('ТН', 'ФИО', 'Код ОА', 'IID УКС/Проекта', 'Описание работ', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'))
+			records.insert(0, ('Период регистрации с: {} по: {}'.format(dateB_format.strftime("%d.%m.%Y"), dateE_format.strftime("%d.%m.%Y")), '', '', '', '','', '', '', '', '', '', ''))
+			records.insert(0, ('МП00-0240 *код подразделения', '', '', '', '','', '', '', '', '', '', ''))
+			records.insert(0, ('Отдел разработки ПО', '', '', '', '','', '', '', '', '', '', ''))											
+			result = pd.DataFrame(records)
+			result.to_excel(path_out + "\Шаблон_СУТЗ_{}-{}_разраб.xlsx".format(dateB, dateE), startrow=0, index=False, header=None)
+		if department == 3:
+			records.insert(0, ('', '', '', '', '','', '', '', '', '', '', ''))		
+			records.insert(0, ('ТН', 'ФИО', 'Код ОА', 'IID УКС/Проекта', 'Описание работ', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'))
+			records.insert(0, ('Период регистрации с: {} по: {}'.format(dateB_format.strftime("%d.%m.%Y"), dateE_format.strftime("%d.%m.%Y")), '', '', '', '','', '', '', '', '', '', ''))
+			records.insert(0, ('МП00-0241 *код подразделения', '', '', '', '','', '', '', '', '', '', ''))
+			records.insert(0, ('Отдел внедрения и сопровождения ПО', '', '', '', '','', '', '', '', '', '', ''))									
+			result = pd.DataFrame(records)
+			result.to_excel(path_out + "\Шаблон_СУТЗ_{}-{}_сопр.xlsx".format(dateB, dateE), startrow=0, index=False, header=None)
+		# print(records)
+		cursor.close()
+		conn.close()
+		mb.showinfo("Успех", "Вроде збс")
+	except NameError:
+		error = sys.exc_info()
+		mb.showerror("Ошибка", sys.exc_info()[1])
 
 def getDTBV():
 	global dateBV
@@ -149,10 +183,16 @@ def impVacation():
 	# dateE_Vacation = '2019-07-12'
 	# name = 'Палагин'
 	# info = 'Отпуск'
-	conn = psycopg2.connect(host='localhost', dbname='work_registry', user='testuser', password='1')
+	conn = psycopg2.connect(host='sam-sib-svn01', dbname='WorkRegistry', user='testuser', password='1')
 	cursor = conn.cursor()
 	cursor.execute('SELECT * FROM tzi_DaysOff(%s::date, %s::date, %s, %s)', (dateBV, dateEV, name, info))
-
+	err = cursor.fetchall()
+	if err[0][0] == -1:
+		mb.showerror("Ошибка", 'Не удалось определить сотрудника.')
+	if err[0][0] == -2:
+		mb.showerror("Ошибка", 'Указаны некорректные даты.')
+	if err[0][0] == 999:
+		mb.showinfo("Успех", "Вроде збс")
 	cursor.close()
 	# conn.close()
 	conn.commit()
@@ -177,7 +217,7 @@ panelFrame.pack()
 DTB = tk.StringVar()
 dateBegin = tk.Entry(panelFrame, textvariable=DTB)
 dateBegin.place(x = 120, y = 10, width = 100, height = 25)
-dateBegin_button = tk.Button(panelFrame, text="Set DateB", command=getDTB, bg='green', fg='white')
+dateBegin_button = tk.Button(panelFrame, text="Set DateB", command=getDTB)
 dateBegin_button.place(x = 230, y = 10, width = 90, height = 25)
 
 DTB_view = tk.StringVar()
@@ -187,7 +227,7 @@ DTB_label.place(x = 10, y = 10, width = 100, height = 25)
 DTE = tk.StringVar()
 dateEnd = tk.Entry(panelFrame, textvariable=DTE)
 dateEnd.place(x = 120, y = 45, width = 100, height = 25)
-dateEnd_button = tk.Button(panelFrame, text="Set DateE", command=getDTE, bg='green', fg='white')
+dateEnd_button = tk.Button(panelFrame, text="Set DateE", command=getDTE)
 dateEnd_button.place(x = 230, y = 45, width = 90, height = 25)
 
 DTE_view = tk.StringVar()
@@ -197,7 +237,7 @@ DTE_label.place(x = 10, y = 45, width = 100, height = 25)
 DTBV = tk.StringVar()
 dateBeginV = tk.Entry(panelFrame, textvariable=DTBV)
 dateBeginV.place(x = 490, y = 10, width = 100, height = 25)
-dateBeginV_button = tk.Button(panelFrame, text="When start", command=getDTBV, bg='Khaki', fg='black')
+dateBeginV_button = tk.Button(panelFrame, text="When start", command=getDTBV)
 dateBeginV_button.place(x = 600, y = 10, width = 90, height = 25)
 
 DTBV_view = tk.StringVar()
@@ -207,7 +247,7 @@ DTBV_label.place(x = 380, y = 10, width = 100, height = 25)
 DTEV = tk.StringVar()
 dateEndV = tk.Entry(panelFrame, textvariable=DTEV)
 dateEndV.place(x = 490, y = 45, width = 100, height = 25)
-dateEndV_button = tk.Button(panelFrame, text="When end", command=getDTEV, bg='Khaki', fg='black')
+dateEndV_button = tk.Button(panelFrame, text="When end", command=getDTEV)
 dateEndV_button.place(x = 600, y = 45, width = 90, height = 25)
 
 DTEV_view = tk.StringVar()
@@ -217,7 +257,7 @@ DTEV_label.place(x = 380, y = 45, width = 100, height = 25)
 name_empl = tk.StringVar()
 name = tk.Entry(panelFrame, textvariable=name_empl)
 name.place(x = 490, y = 100, width = 100, height = 25)
-name_button = tk.Button(panelFrame, text="Who", command=getName, bg='Khaki', fg='black')
+name_button = tk.Button(panelFrame, text="Who", command=getName)
 name_button.place(x = 600, y = 100, width = 90, height = 25)
 
 name_view = tk.StringVar()
@@ -227,7 +267,7 @@ name_label.place(x = 380, y = 100, width = 100, height = 25)
 info_str = tk.StringVar()
 info = tk.Entry(panelFrame, textvariable=info_str)
 info.place(x = 490, y = 140, width = 100, height = 25)
-info_button = tk.Button(panelFrame, text="Where", command=getInfo, bg='Khaki', fg='black')
+info_button = tk.Button(panelFrame, text="Where", command=getInfo)
 info_button.place(x = 600, y = 140, width = 90, height = 25)
 
 info_view = tk.StringVar()
@@ -248,9 +288,9 @@ dep_UPBS_checkbutton.place(x = 10, y = 90)
 dep_Developers_checkbutton.place(x = 100, y = 90)
 dep_Support_checkbutton.place(x = 10, y = 140)
 
-browseButton_Import = tk.Button(panelFrame, text='Import Data to WorkRegistry', command=impExcel, bg='Tomato', fg='white', font=('helvetica', 12, 'bold'))
-browseButton_Export = tk.Button(panelFrame, text='Export Data for SUTZ', command=getExcel, bg='green', fg='white', font=('helvetica', 12, 'bold'))
-browseButton_Vacation = tk.Button(panelFrame, text='VACATION!!', command=impVacation, bg='Khaki', fg='black', font=('helvetica', 12, 'bold'))
+browseButton_Import = tk.Button(panelFrame, text='Import Data to WorkRegistry', command=impExcel, fg='black', font=('helvetica', 12, 'bold'))
+browseButton_Export = tk.Button(panelFrame, text='Export Data for SUTZ', command=getExcel, fg='black', font=('helvetica', 12, 'bold'))
+browseButton_Vacation = tk.Button(panelFrame, text='VACATION!!', command=impVacation, fg='black', font=('helvetica', 12, 'bold'))
 
 browseButton_Import.place(x = 190, y = 280, width = 300, height = 75)
 browseButton_Export.place(x = 10, y = 190, width = 300, height = 75)
