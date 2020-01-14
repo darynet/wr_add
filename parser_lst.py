@@ -10,7 +10,7 @@ import sys
 
 path = os.getcwd()	# получим путь к директории, где лежит скрипт
 path_in = path + r'\tmp' # путь, где лежат эксельки для загрузки в workregistry
-path_out = path + r'\2019\декабрь' # путь, куда выгружаются эксельки для СУТЗ
+path_out = path + r'\2020\Январь' # путь, куда выгружаются эксельки для СУТЗ
 
 # Импорт данных в workregistry. Спарсим данные из экселек, подключимся к БД и запустим скрипт загрузки
 def impExcel ():
@@ -37,7 +37,7 @@ def impExcel ():
 			insertdata.append(row)
 
 	# коннектимся к БД
-		conn = psycopg2.connect(host='sam-sib-svn01', dbname='WorkRegistry', user='testuser', password='1')
+		conn = psycopg2.connect(host='localhost', dbname='WorkRegistry', user='testuser', password='test')
 		cursor = conn.cursor()
 		err = []
 		msg = []
@@ -89,11 +89,13 @@ def impExcel ():
 			msg.append(cursor.fetchall())
 		cursor.close() 
 		conn.commit()
+		# запрос выполняется к каждой спарсенной строчке последовательно, а не ко всему объему данных (оставлю это здесь, а то жзабуду через пять минут). Т.е. в "values (%s, %s..." подставляется одна единственная строка.
+		# вывод ошибок стремный, конечно. надо добавить переменную, в которую записывать саму спарсенную строку, на которой возникает ошибка, а не только то, что выводит хранимка Евгения
 		#conn.close()	# Закрываем подключение (rollback)
 		for i in range(len(msg)-1):
-			if msg[i][0][0] != 999: err.append(msg[i][0][2] + ) 
+			if msg[i][0][0] != 999: err.append(msg[i][0][2]) 
 		if err != [] or msg[0][0][0] != 999: 
-			mb.showinfo("Result", err)
+			mb.showinfo("Result", str(err) + str(insertdata[row]))
 		else: mb.showinfo("Result", 'успешное завершение')	#сообщим что, загрузили что-то в БД
 	except ValueError:
 			mb.showerror("Ошибка", sys.exc_info()[1])	# расскажем, что пошло не так
@@ -112,6 +114,9 @@ def getDTE():
 	dateE = dateE.strip("\'")
 	DTE_view.set(dateE)
 
+# получение пути, куда выгружаются эксельки для СУТЗ
+# перетащи path_out сюда
+
 # экспорт в СУТЗ: подключение к БД, выполнение скрипта Export2SUTZ, запись в эксель
 def getExcel ():
 	# department = 3	# 1 - Управление (Овсянкин Е.), 2 - Отдел разработки, 3 - Отдел сопровождения
@@ -127,12 +132,12 @@ def getExcel ():
 		department = 3
 	try:
 		# headers = ['ТН', 'ФИО', 'Код ОА', 'IID УКС/Проекта', 'Описание работ', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС']
-		conn = psycopg2.connect(host='sam-sib-svn01', dbname='WorkRegistry', user='testuser', password='1')
+		conn = psycopg2.connect(host='localhost', dbname='WorkRegistry', user='testuser', password='test')
 		cursor = conn.cursor()
 		cursor.execute('SELECT * FROM  Export2SUTZ(%s::date,%s::date, %s::int)', (dateB, dateE, department))
 		records = cursor.fetchall()
-		dateB_format = datetime(int(dateB[0:4]), int(dateB[5:7]), int(dateB[8:10]))
-		dateE_format = datetime(int(dateE[0:4]), int(dateE[5:7]), int(dateE[8:10]))
+		dateB_format = datetime(int(dateB[0:4]), int(dateB[5:7]), int(dateB[8:10]))	# зачеем?? боже зачееем?? можно же так - datetime.datetime.strptime(dateB,'%Y-%m-%d') #и вообще перенести сразу в функцию
+		dateE_format = datetime(int(dateE[0:4]), int(dateE[5:7]), int(dateE[8:10]))	# datetime.datetime.strptime(dateE,'%Y-%m-%d')
 		if department == 1:
 			records.insert(0, ('', '', '', '', '','', '', '', '', '', '', ''))		
 			records.insert(0, ('ТН', 'ФИО', 'Код ОА', 'IID УКС/Проекта', 'Описание работ', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'))
@@ -183,7 +188,7 @@ def impVacation():
 	# dateE_Vacation = '2019-07-12'
 	# name = 'Палагин'
 	# info = 'Отпуск'
-	conn = psycopg2.connect(host='sam-sib-svn01', dbname='WorkRegistry', user='testuser', password='1')
+	conn = psycopg2.connect(host='localhost', dbname='WorkRegistry', user='testuser', password='test')
 	cursor = conn.cursor()
 	cursor.execute('SELECT * FROM tzi_DaysOff(%s::date, %s::date, %s, %s)', (dateBV, dateEV, name, info))
 	err = cursor.fetchall()
@@ -211,88 +216,104 @@ def getInfo():
 
 # кнопочки для Саши
 root = tk.Tk()
-panelFrame = tk.Frame(root, width = 800, height = 500, bg = 'lightsteelblue')
-panelFrame.pack()
+FirstFrame = tk.Frame(root, width = 360, height = 380)
+SecondFrame = tk.Frame(root, width = 345, height = 380)
+ImportFrame = tk.Frame(FirstFrame, width = 360, height = 100)
+ExportFrame = tk.Frame(FirstFrame, width = 360, height = 280, bg = 'lightsteelblue')
+VacationFrame = tk.Frame(SecondFrame, width = 345, height = 380, bg = 'lightgrey')
 
+# FirstFrame.pack()
+# SecondFrame.pack()
+FirstFrame.grid(row = 1, column = 1)
+SecondFrame.grid(row = 1, column = 2)
+ImportFrame.grid(row = 1, column = 1)
+ExportFrame.grid(row = 2, column = 1)
+VacationFrame.grid(row = 1, column = 1)
+
+# кнопка для импорта данных в workregistry
+browseButton_Import = tk.Button(ImportFrame, text='Загрузка в WorkRegistry', command=impExcel, fg='black', font=('helvetica', 12, 'bold'))
+browseButton_Import.place(x = 30, y = 10, width = 300, height = 75)
+
+# кнопки для экспорта в СУТЗ
 DTB = tk.StringVar()
-dateBegin = tk.Entry(panelFrame, textvariable=DTB)
+dateBegin = tk.Entry(ExportFrame, textvariable=DTB)
 dateBegin.place(x = 120, y = 10, width = 100, height = 25)
-dateBegin_button = tk.Button(panelFrame, text="Set DateB", command=getDTB)
-dateBegin_button.place(x = 230, y = 10, width = 90, height = 25)
+dateBegin_button = tk.Button(ExportFrame, text="Начало периода", command=getDTB)
+dateBegin_button.place(x = 230, y = 10, width = 115, height = 25)
 
 DTB_view = tk.StringVar()
-DTB_label = tk.Label(panelFrame, textvariable=DTB_view, fg="#eee", bg="#333", padx=0)
+DTB_label = tk.Label(ExportFrame, textvariable=DTB_view, fg="#eee", bg="#333", padx=0)
 DTB_label.place(x = 10, y = 10, width = 100, height = 25)
 
 DTE = tk.StringVar()
-dateEnd = tk.Entry(panelFrame, textvariable=DTE)
-dateEnd.place(x = 120, y = 45, width = 100, height = 25)
-dateEnd_button = tk.Button(panelFrame, text="Set DateE", command=getDTE)
-dateEnd_button.place(x = 230, y = 45, width = 90, height = 25)
+dateEnd = tk.Entry(ExportFrame, textvariable=DTE)
+dateEnd.place(x = 120, y = 50, width = 100, height = 25)
+dateEnd_button = tk.Button(ExportFrame, text="Окончание периода", command=getDTE)
+dateEnd_button.place(x = 230, y = 50, width = 115, height = 25)
 
 DTE_view = tk.StringVar()
-DTE_label = tk.Label(panelFrame, textvariable=DTE_view, fg="#eee", bg="#333", padx=0)
-DTE_label.place(x = 10, y = 45, width = 100, height = 25)
-
-DTBV = tk.StringVar()
-dateBeginV = tk.Entry(panelFrame, textvariable=DTBV)
-dateBeginV.place(x = 490, y = 10, width = 100, height = 25)
-dateBeginV_button = tk.Button(panelFrame, text="When start", command=getDTBV)
-dateBeginV_button.place(x = 600, y = 10, width = 90, height = 25)
-
-DTBV_view = tk.StringVar()
-DTBV_label = tk.Label(panelFrame, textvariable=DTBV_view, fg="#eee", bg="#333", padx=0)
-DTBV_label.place(x = 380, y = 10, width = 100, height = 25)
-
-DTEV = tk.StringVar()
-dateEndV = tk.Entry(panelFrame, textvariable=DTEV)
-dateEndV.place(x = 490, y = 45, width = 100, height = 25)
-dateEndV_button = tk.Button(panelFrame, text="When end", command=getDTEV)
-dateEndV_button.place(x = 600, y = 45, width = 90, height = 25)
-
-DTEV_view = tk.StringVar()
-DTEV_label = tk.Label(panelFrame, textvariable=DTEV_view, fg="#eee", bg="#333", padx=0)
-DTEV_label.place(x = 380, y = 45, width = 100, height = 25)
-
-name_empl = tk.StringVar()
-name = tk.Entry(panelFrame, textvariable=name_empl)
-name.place(x = 490, y = 100, width = 100, height = 25)
-name_button = tk.Button(panelFrame, text="Who", command=getName)
-name_button.place(x = 600, y = 100, width = 90, height = 25)
-
-name_view = tk.StringVar()
-name_label = tk.Label(panelFrame, textvariable=name_view, fg="#eee", bg="#333", padx=0)
-name_label.place(x = 380, y = 100, width = 100, height = 25)
-
-info_str = tk.StringVar()
-info = tk.Entry(panelFrame, textvariable=info_str)
-info.place(x = 490, y = 140, width = 100, height = 25)
-info_button = tk.Button(panelFrame, text="Where", command=getInfo)
-info_button.place(x = 600, y = 140, width = 90, height = 25)
-
-info_view = tk.StringVar()
-info_label = tk.Label(panelFrame, textvariable=info_view, fg="#eee", bg="#333", padx=0)
-info_label.place(x = 380, y = 140, width = 100, height = 25)
+DTE_label = tk.Label(ExportFrame, textvariable=DTE_view, fg="#eee", bg="#333", padx=0)
+DTE_label.place(x = 10, y = 50, width = 100, height = 25)
 
 # Отделы (для выгрузки в СУТЗ)
 dep_UPBS = tk.IntVar()
-dep_UPBS_checkbutton = tk.Checkbutton(panelFrame, text="УПБС", variable=dep_UPBS,
-                                 onvalue=1, offvalue=0, padx=15, pady=10)
+dep_UPBS_checkbutton = tk.Checkbutton(ExportFrame, text="УПБС", variable=dep_UPBS,
+                                 onvalue=1, offvalue=0, padx=10, pady=10, bg = 'lightsteelblue')
 dep_Developers = tk.IntVar()
-dep_Developers_checkbutton = tk.Checkbutton(panelFrame, text="Отдел разработки ПО", variable=dep_Developers,
-                                     onvalue=1, offvalue=0, padx=15, pady=10)
+dep_Developers_checkbutton = tk.Checkbutton(ExportFrame, text="Отдел разработки ПО", variable=dep_Developers,
+                                     onvalue=1, offvalue=0, padx=10, pady=10, bg = 'lightsteelblue')
 dep_Support = tk.IntVar()
-dep_Support_checkbutton = tk.Checkbutton(panelFrame, text="Отдел внедрения и сопровождения ПО", variable=dep_Support,
-                                     onvalue=1, offvalue=0, padx=15, pady=10)
+dep_Support_checkbutton = tk.Checkbutton(ExportFrame, text="Отдел внедрения и сопровождения ПО", variable=dep_Support,
+                                     onvalue=1, offvalue=0, padx=10, pady=10, bg = 'lightsteelblue')
 dep_UPBS_checkbutton.place(x = 10, y = 90)
 dep_Developers_checkbutton.place(x = 100, y = 90)
-dep_Support_checkbutton.place(x = 10, y = 140)
+dep_Support_checkbutton.place(x = 10, y = 130)
 
-browseButton_Import = tk.Button(panelFrame, text='Import Data to WorkRegistry', command=impExcel, fg='black', font=('helvetica', 12, 'bold'))
-browseButton_Export = tk.Button(panelFrame, text='Export Data for SUTZ', command=getExcel, fg='black', font=('helvetica', 12, 'bold'))
-browseButton_Vacation = tk.Button(panelFrame, text='VACATION!!', command=impVacation, fg='black', font=('helvetica', 12, 'bold'))
+browseButton_Export = tk.Button(ExportFrame, text='Выгрузка для СУТЗ', command=getExcel, fg='black', font=('helvetica', 12, 'bold'))
+browseButton_Export.place(x = 30, y = 180, width = 300, height = 75)
 
-browseButton_Import.place(x = 190, y = 280, width = 300, height = 75)
-browseButton_Export.place(x = 10, y = 190, width = 300, height = 75)
-browseButton_Vacation.place(x = 380, y = 190, width = 300, height = 75)
+# кнопки для вакэйшна
+DTBV = tk.StringVar()
+dateBeginV = tk.Entry(VacationFrame, textvariable=DTBV)
+dateBeginV.place(x = 120, y = 10, width = 100, height = 25)
+dateBeginV_button = tk.Button(VacationFrame, text="Дата начала", command=getDTBV)
+dateBeginV_button.place(x = 230, y = 10, width = 100, height = 25)
+
+DTBV_view = tk.StringVar()
+DTBV_label = tk.Label(VacationFrame, textvariable=DTBV_view, fg="#eee", bg="#333", padx=0)
+DTBV_label.place(x = 10, y = 10, width = 100, height = 25)
+
+DTEV = tk.StringVar()
+dateEndV = tk.Entry(VacationFrame, textvariable=DTEV)
+dateEndV.place(x = 120, y = 45, width = 100, height = 25)
+dateEndV_button = tk.Button(VacationFrame, text="Дата окончания", command=getDTEV)
+dateEndV_button.place(x = 230, y = 45, width = 100, height = 25)
+
+DTEV_view = tk.StringVar()
+DTEV_label = tk.Label(VacationFrame, textvariable=DTEV_view, fg="#eee", bg="#333", padx=0)
+DTEV_label.place(x = 10, y = 45, width = 100, height = 25)
+
+name_empl = tk.StringVar()
+name = tk.Entry(VacationFrame, textvariable=name_empl)
+name.place(x = 120, y = 110, width = 100, height = 25)
+name_button = tk.Button(VacationFrame, text="Сотрудник", command=getName)
+name_button.place(x = 230, y = 110, width = 100, height = 25)
+
+name_view = tk.StringVar()
+name_label = tk.Label(VacationFrame, textvariable=name_view, fg="#eee", bg="#333", padx=0)
+name_label.place(x = 10, y = 110, width = 100, height = 25)
+
+info_str = tk.StringVar()
+info = tk.Entry(VacationFrame, textvariable=info_str)
+info.place(x = 120, y = 140, width = 100, height = 25)
+info_button = tk.Button(VacationFrame, text="Комментарий", command=getInfo)
+info_button.place(x = 230, y = 140, width = 100, height = 25)
+
+info_view = tk.StringVar()
+info_label = tk.Label(VacationFrame, textvariable=info_view, fg="#eee", bg="#333", padx=0)
+info_label.place(x = 10, y = 140, width = 100, height = 25)
+
+browseButton_Vacation = tk.Button(VacationFrame, text='Добавить отпуск', command=impVacation, fg='black', font=('helvetica', 12, 'bold'))
+browseButton_Vacation.place(x = 23, y = 190, width = 300, height = 75)
+
 root.mainloop()
