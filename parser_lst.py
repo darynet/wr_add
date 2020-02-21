@@ -10,7 +10,7 @@ import sys
 
 path = os.getcwd()	# получим путь к директории, где лежит скрипт
 path_in = path + r'\tmp' # путь, где лежат эксельки для загрузки в workregistry
-path_out = path + r'\2020\Январь' # путь, куда выгружаются эксельки для СУТЗ
+path_out = path + r'\2020\Февраль' # путь, куда выгружаются эксельки для СУТЗ
 
 # Импорт данных в workregistry. Спарсим данные из экселек, подключимся к БД и запустим скрипт загрузки
 def impExcel ():
@@ -25,7 +25,7 @@ def impExcel ():
 			tz.loc[tz['Закрытых заявок Ремеди'] == '', 'Закрытых заявок Ремеди'] = '0'	# ClosedRemedyRequestCnt - int, пустое или null при записи в БД не прокатывает
 			tz['Дата'] = tz['Дата'].apply(str)	#чтоб дата нормально отображалась
 			for row in tz.itertuples(index=True, name=None):	# это видимо прописывают индексы к каждой строчке (?)
-				if row[1] != '' and row[2] != '' and row[3] != '': #берем только те строки, по которым указана дата, ФИО и таск
+				if row[1] != '' or row[2] != '' or row[3] != '': #берем только те строки, по которым указана дата, ФИО и таск
 					dataset.append(row)
 	
 	# очень тупо меняем индексы (потому что нормально через цикл у меня не получилось сделать)
@@ -37,9 +37,9 @@ def impExcel ():
 			insertdata.append(row)
 
 	# коннектимся к БД
-		conn = psycopg2.connect(host='localhost', dbname='WorkRegistry', user='testuser', password='test')
+		conn = psycopg2.connect(host='localhost', dbname='WorkRegistry', user='testuser', password='1')
 		cursor = conn.cursor()
-		err = []
+		error_date = []
 		msg = []
 		for row in range(len(insertdata)):
 			cursor.execute(
@@ -86,16 +86,17 @@ def impExcel ():
 		
 			""", insertdata[row])
 			cursor.execute("select * from tmp__res_post;")
-			msg.append(cursor.fetchall())
-		cursor.close() 
+			tmp = cursor.fetchall()
+			if tmp[0][0] != 999:
+				msg.append(str(tmp) + str(insertdata[row]))
+				error_date.append(insertdata[row])
+		#cursor.close() 
 		conn.commit()
 		# запрос выполняется к каждой спарсенной строчке последовательно, а не ко всему объему данных (оставлю это здесь, а то жзабуду через пять минут). Т.е. в "values (%s, %s..." подставляется одна единственная строка.
 		# вывод ошибок стремный, конечно. надо добавить переменную, в которую записывать саму спарсенную строку, на которой возникает ошибка, а не только то, что выводит хранимка Евгения
-		#conn.close()	# Закрываем подключение (rollback)
-		for i in range(len(msg)-1):
-			if msg[i][0][0] != 999: err.append(msg[i][0][2]) 
-		if err != [] or msg[0][0][0] != 999: 
-			mb.showinfo("Result", str(err) + str(insertdata[row]))
+		conn.close()	# Закрываем подключение (rollback)
+		if msg != []:
+			mb.showinfo("Result", msg)
 		else: mb.showinfo("Result", 'успешное завершение')	#сообщим что, загрузили что-то в БД
 	except ValueError:
 			mb.showerror("Ошибка", sys.exc_info()[1])	# расскажем, что пошло не так
@@ -106,7 +107,6 @@ def getDTB():
 	dateB = "'" + DTB.get() + "'"
 	dateB = dateB.strip("\'")
 	DTB_view.set(dateB)
-
 
 def getDTE():
 	global dateE
@@ -132,7 +132,7 @@ def getExcel ():
 		department = 3
 	try:
 		# headers = ['ТН', 'ФИО', 'Код ОА', 'IID УКС/Проекта', 'Описание работ', 'ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС']
-		conn = psycopg2.connect(host='localhost', dbname='WorkRegistry', user='testuser', password='test')
+		conn = psycopg2.connect(host='localhost', dbname='WorkRegistry', user='testuser', password='1')
 		cursor = conn.cursor()
 		cursor.execute('SELECT * FROM  Export2SUTZ(%s::date,%s::date, %s::int)', (dateB, dateE, department))
 		records = cursor.fetchall()
@@ -188,7 +188,7 @@ def impVacation():
 	# dateE_Vacation = '2019-07-12'
 	# name = 'Палагин'
 	# info = 'Отпуск'
-	conn = psycopg2.connect(host='localhost', dbname='WorkRegistry', user='testuser', password='test')
+	conn = psycopg2.connect(host='localhost', dbname='WorkRegistry', user='testuser', password='1')
 	cursor = conn.cursor()
 	cursor.execute('SELECT * FROM tzi_DaysOff(%s::date, %s::date, %s, %s)', (dateBV, dateEV, name, info))
 	err = cursor.fetchall()
