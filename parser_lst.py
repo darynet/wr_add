@@ -39,7 +39,7 @@ def impExcel ():
 	# коннектимся к БД
 		conn = psycopg2.connect(host='localhost', dbname='WorkRegistry', user='testuser', password='1')
 		cursor = conn.cursor()
-		error_date = pd.DataFrame(columns=['Индекс','Дата','Исполнитель','Код', 'Наименование', 'Работы', 'Список контактов по работе', 'Затрачено времени (в минутах)', 'Видимость', 'Код задачи', 'Краткое наименование задачи', 'Контрагент', 'Вид затрат', 'Функциональный блок', 'Вид работ', 'Вид услуг СФ',	'Вид формирования СФ', 'Состояние', 'Закрытых заявок Ремеди'])
+		error_date = pd.DataFrame(columns=['Номер строки','Дата','Исполнитель','Код', 'Наименование', 'Работы', 'Список контактов по работе', 'Затрачено времени (в минутах)', 'Видимость', 'Код задачи', 'Краткое наименование задачи', 'Контрагент', 'Вид затрат', 'Функциональный блок', 'Вид работ', 'Вид услуг СФ',	'Вид формирования СФ', 'Состояние', 'Закрытых заявок Ремеди'])
 		msg = []
 		for row in range(len(insertdata)):
 			cursor.execute(
@@ -88,17 +88,18 @@ def impExcel ():
 			cursor.execute("select * from tmp__res_post;")
 			tmp = cursor.fetchall()
 			if tmp[0][0] != 999:
-				msg.append(str(tmp) + str(insertdata[row]))
+				msg.append(str(tmp) + str(insertdata[row][1])+ str(insertdata[row][2])+ str(insertdata[row][3])+ str(insertdata[row][9]))
 				if error_date.size == 0: i = 0
-				else:i = max(error_date.index) + 1
+				else: i = max(error_date.index) + 1
 				error_date.loc[i] = insertdata[row]
-		#cursor.close() 
-		conn.commit()
+		cursor.close() 
+		# conn.commit()
 		# запрос выполняется к каждой спарсенной строчке последовательно, а не ко всему объему данных (оставлю это здесь, а то жзабуду через пять минут). Т.е. в "values (%s, %s..." подставляется одна единственная строка.
 		# вывод ошибок стремный, конечно. надо добавить переменную, в которую записывать саму спарсенную строку, на которой возникает ошибка, а не только то, что выводит хранимка Евгения
 		conn.close()	# Закрываем подключение (rollback)
 		if msg != []:
 			mb.showinfo("Result", msg)
+			error_date.to_excel("errors.xlsx", index=False) 
 		else: mb.showinfo("Result", 'успешное завершение')	#сообщим что, загрузили что-то в БД
 	except ValueError:
 			mb.showerror("Ошибка", sys.exc_info()[1])	# расскажем, что пошло не так
