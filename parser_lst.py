@@ -39,7 +39,7 @@ def impExcel ():
 	# коннектимся к БД
 		conn = psycopg2.connect(host='localhost', dbname='WorkRegistry', user='testuser', password='1')
 		cursor = conn.cursor()
-		error_date = []
+		error_date = pd.DataFrame(columns=['Индекс','Дата','Исполнитель','Код', 'Наименование', 'Работы', 'Список контактов по работе', 'Затрачено времени (в минутах)', 'Видимость', 'Код задачи', 'Краткое наименование задачи', 'Контрагент', 'Вид затрат', 'Функциональный блок', 'Вид работ', 'Вид услуг СФ',	'Вид формирования СФ', 'Состояние', 'Закрытых заявок Ремеди'])
 		msg = []
 		for row in range(len(insertdata)):
 			cursor.execute(
@@ -89,7 +89,9 @@ def impExcel ():
 			tmp = cursor.fetchall()
 			if tmp[0][0] != 999:
 				msg.append(str(tmp) + str(insertdata[row]))
-				error_date.append(insertdata[row])
+				if error_date.size == 0: i = 0
+				else:i = max(error_date.index) + 1
+				error_date.loc[i] = insertdata[row]
 		#cursor.close() 
 		conn.commit()
 		# запрос выполняется к каждой спарсенной строчке последовательно, а не ко всему объему данных (оставлю это здесь, а то жзабуду через пять минут). Т.е. в "values (%s, %s..." подставляется одна единственная строка.
